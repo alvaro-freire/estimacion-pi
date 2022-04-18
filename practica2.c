@@ -30,6 +30,28 @@ int MPI_FlattreeColectiva(void *buff, void *recvbuff, int count,
     return MPI_SUCCESS;
 }
 
+int MPI_BinomialBcast(void *buf, int count, MPI_Datatype datatype,
+                int root, MPI_Comm comm) {
+    int i = 1, mask = 0x1;
+    int rank, n_procs;
+
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &n_procs);
+
+    while (mask < n_procs) {
+
+        if (rank < mask && (rank + mask < n_procs)) {
+            MPI_Send(buf, count, datatype, (rank + mask), 0, comm);
+        } else if (rank >= mask && rank < mask << 1) {
+            MPI_Recv(buf, count, datatype, (rank - mask), 0, comm, MPI_STATUS_IGNORE);
+        }
+
+        mask <<= 1;
+    }
+    return MPI_SUCCESS;
+}
+
+
 int main(int argc, char *argv[]) {
     int i, done = 0, n, count;
     double PI25DT = 3.141592653589793238462643;
@@ -52,7 +74,7 @@ int main(int argc, char *argv[]) {
             total_pi = 0;
         }
 
-        MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_BinomialBcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         if (n == 0) {
             break;
@@ -70,11 +92,9 @@ int main(int argc, char *argv[]) {
         }
         pi = ((double) count / (double) n) * 4.0;
 
-        pi = pi + rank/100;
-
         if (MPI_FlattreeColectiva(&pi, &total_pi, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD) != MPI_SUCCESS) {
             printf("Error\n");
-        }else if (rank == 0) {
+        } else if (rank == 0) {
             printf("pi is approx. %.16f, Error is %.16f\n", total_pi, fabs(total_pi - PI25DT));
         }
     }
