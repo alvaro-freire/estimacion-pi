@@ -1,7 +1,34 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <math.h>
 #include <mpi.h>
+
+int MPI_FlattreeColectiva(void *buff, void *recvbuff, int count,
+                            MPI_Datatype datatype, int root, MPI_Comm comm) {
+    int rank, n_procs;
+    double n, total;
+    MPI_Status status;
+
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &n_procs);
+
+    if (rank == root) {
+        total = *(double *)buff;
+        for (int i = 0; i < n_procs; i++) {
+            if (i == root) continue;
+            MPI_Recv(&n, count, datatype, MPI_ANY_SOURCE, 0, comm, &status);
+            total += n;
+        }
+        *(double *)recvbuff = total;
+    } else {
+        for (int i = 0; i < n_procs; i++) {
+            if (i == root) continue;
+            MPI_Send(buff, 1, datatype, 0, 0,  comm);
+        }
+    }
+    return MPI_SUCCESS;
+}
 
 int main(int argc, char *argv[]) {
     int i, done = 0, n, count;
@@ -11,6 +38,7 @@ int main(int argc, char *argv[]) {
     // variables for MPI
     int n_procs, rank;
     double total_pi;
+    MPI_Status status;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
@@ -42,8 +70,11 @@ int main(int argc, char *argv[]) {
         }
         pi = ((double) count / (double) n) * 4.0;
 
-        MPI_Reduce(&pi, &total_pi, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        if (rank == 0) {
+        pi = pi + rank/100;
+
+        if (MPI_FlattreeColectiva(&pi, &total_pi, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD) != MPI_SUCCESS) {
+            printf("Error\n");
+        }else if (rank == 0) {
             printf("pi is approx. %.16f, Error is %.16f\n", total_pi, fabs(total_pi - PI25DT));
         }
     }
